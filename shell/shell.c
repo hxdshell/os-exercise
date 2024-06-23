@@ -15,6 +15,7 @@
 #define RESETCOLOR "\033[0m" 
 
 char **tokenize(char * input, long MAX_NOTOKENS);
+void cleanup(char **tokens);
 
 int main(int argc, char const *argv[])
 {
@@ -37,18 +38,18 @@ int main(int argc, char const *argv[])
             if(tokens[2] != NULL || tokens[1] == NULL){
                 printf("cd : invalid argument\n");
                 printf("Usage: cd <pathname>\n\n");
-                continue;
             }
-            if(chdir(tokens[1]) == -1){
+            else if(chdir(tokens[1]) == -1){
                 printf("%s\n\n",strerror(errno));
-                continue;
             }
+            cleanup(tokens);
             continue;
         }
         
         rc = fork();
         if(rc < 0){
             perror("process creation failed!");
+            cleanup(tokens);
             continue;
         }else if(rc == 0){
             if(execvp(tokens[0],tokens)==-1){
@@ -57,9 +58,20 @@ int main(int argc, char const *argv[])
             }
         }else{
             waitpid(rc,NULL,0);
+            cleanup(tokens);
         }
     }
+
     return 0;
+}
+
+void cleanup(char **tokens){
+    int i;
+    for(i = 0; tokens[i] != NULL; i++){
+        printf("freed : %s\n",tokens[i]);
+        free(tokens[i]);
+    }
+    free(tokens);
 }
 
 char **tokenize(char *input, long MAX_NO_TOKENS){
@@ -84,6 +96,6 @@ char **tokenize(char *input, long MAX_NO_TOKENS){
     }
     
     free(token);
-    // tokens[token_number] = NULL;
+    tokens[token_number] = NULL;
     return tokens;
 }
