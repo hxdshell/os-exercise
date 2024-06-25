@@ -9,13 +9,16 @@
 
 #define MAX_ARG_LEN 128 // accurate length can be found in MAX_ARG_STRLEN (look it up)
 #define MAX_DIR_LEN 1024
+#define TOTAL_BG 64
 
 #define GREEN "\033[0;32m"
 #define CYAN "\033[0;36m"
 #define RESETCOLOR "\033[0m" 
 
+
 char **tokenize(char * input, long MAX_NOTOKENS, int *last_token);
 void cleanup(char **tokens);
+int store_new_bg_process(int *record, int n);
 
 int main(int argc, char const *argv[])
 {
@@ -27,6 +30,9 @@ int main(int argc, char const *argv[])
     int bg_running_processes=0;
     char is_bg = 0;
     int wait_bg;
+    int bg_process_ids[TOTAL_BG];
+    memset(bg_process_ids,-1,TOTAL_BG);
+    int bg_index;
 
     char command[MAX_INPUT_SIZE];
     char cwd[MAX_DIR_LEN];
@@ -36,7 +42,6 @@ int main(int argc, char const *argv[])
     while(1){
         // reap background process
         if(bg_running_processes > 0){
-            printf("%d\n",bg_running_processes);
             wait_bg = waitpid(-1,NULL,WNOHANG);
             if(wait_bg > 0){
                 printf("\nDone\t[%d]\n",wait_bg);
@@ -71,10 +76,34 @@ int main(int argc, char const *argv[])
                 tokens[last_token] = NULL;
                 bg_running_processes++;
             }
-            if(tokens[last_token] == NULL)
-                printf("yes!\n");
+
+            //exit
+            int id;
+            if(strcmp(tokens[0],"exit") == 0 && last_token == 0){
+                for(int i = 0; i < TOTAL_BG && bg_running_processes > 0; i++){
+                    id = bg_process_ids[i];
+                    if(id != -1){
+                        kill(id,SIGTERM);
+                        bg_process_ids[i] = -1;
+                        bg_running_processes--;
+                    }
+                }
+                cleanup(tokens);
+                exit(0);
+            }
+            
         }
-        
+
+        // check if we can careate a bg process or not. max TOTAL_BG
+        if(is_bg){
+            bg_index = store_new_bg_process(bg_process_ids,TOTAL_BG);
+            if(bg_index == -1){
+                printf("\n too many background processes\n");
+                cleanup(tokens);
+                continue;
+            }
+        }
+
         rc = fork();
         if(rc < 0){
             perror("process creation failed!");
@@ -86,13 +115,23 @@ int main(int argc, char const *argv[])
                 exit(errno);
             }
         }else{
-            if(!is_bg)
+            if(!is_bg){
                 waitpid(rc,NULL,0);
+            }else{
+                bg_process_ids[bg_index] = rc;
+            }
             cleanup(tokens);
         }
     }
 
     return 0;
+}
+int store_new_bg_process(int *record, int n){
+    for(int i = 0; i < n; i++){
+        if(record[i] == -1)
+            return i;
+    }
+    return -1;
 }
 
 void cleanup(char **tokens){
