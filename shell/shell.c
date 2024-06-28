@@ -20,6 +20,12 @@ char **tokenize(char * input, long MAX_NOTOKENS, int *last_token);
 void cleanup(char **tokens);
 int store_new_bg_process(int *record, int n);
 
+void sigint_handler(int num){
+    if(getpgid(0) != getpid()){
+        kill(SIGINT,0);
+    }
+    printf("\n");
+}
 int main(int argc, char const *argv[])
 {
     long MAX_INPUT_SIZE = sysconf(_SC_ARG_MAX); // ~2MB
@@ -39,6 +45,10 @@ int main(int argc, char const *argv[])
 
     char **tokens;
     int rc;
+    int shell_id = getpid();
+
+
+    signal(SIGINT,sigint_handler);
     while(1){
         // reap background process
         if(bg_running_processes > 0){
@@ -110,13 +120,17 @@ int main(int argc, char const *argv[])
             cleanup(tokens);
             continue;
         }else if(rc == 0){
+            if(is_bg){
+                setpgid(0,0);
+            }
             if(execvp(tokens[0],tokens)==-1){
                 printf("%s\n\n",strerror(errno));
                 exit(errno);
             }
         }else{
             if(!is_bg){
-                waitpid(rc,NULL,0);
+                int status;
+                waitpid(rc,&status,0);
             }else{
                 bg_process_ids[bg_index] = rc;
             }
@@ -166,6 +180,7 @@ char **tokenize(char *input, long MAX_NO_TOKENS, int *last_token){
     
     free(token);
     tokens[token_number] = NULL;
-    *last_token = (token_number > 0) ? token_number -1 : token_number;
+    if(last_token != NULL)
+        *last_token = (token_number > 0) ? token_number -1 : token_number;
     return tokens;
 }
