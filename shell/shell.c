@@ -10,6 +10,7 @@
 #define MAX_ARG_LEN 128 // accurate length can be found in MAX_ARG_STRLEN (look it up)
 #define MAX_DIR_LEN 1024
 #define TOTAL_BG 64
+#define TOTAL_PARALLEL_FG 64
 
 #define GREEN "\033[0;32m"
 #define CYAN "\033[0;36m"
@@ -19,11 +20,13 @@
 char **tokenize(char * input, long MAX_NOTOKENS, int *last_token);
 void cleanup(char **tokens);
 int store_new_bg_process(int *record, int n);
+void command_separation(char *input, long MAX_NO_TOKENS, int *last_token);
 
 void sigint_handler(int num){
     if(getpgid(0) != getpid()){
         kill(SIGINT,0);
     }
+    exit(0);
     printf("\n");
 }
 int main(int argc, char const *argv[])
@@ -63,6 +66,9 @@ int main(int argc, char const *argv[])
         getcwd(cwd,sizeof(cwd));
         printf("%s%s%s$ ", CYAN,cwd,RESETCOLOR);
         fgets(command, sizeof(command), stdin);
+        command_separation(command,MAX_NO_TOKENS,&last_token);
+
+        exit(0);
         tokens = tokenize(command,MAX_NO_TOKENS,&last_token);
 
         if(tokens[0] != NULL){
@@ -137,15 +143,7 @@ int main(int argc, char const *argv[])
             cleanup(tokens);
         }
     }
-
     return 0;
-}
-int store_new_bg_process(int *record, int n){
-    for(int i = 0; i < n; i++){
-        if(record[i] == -1)
-            return i;
-    }
-    return -1;
 }
 
 void cleanup(char **tokens){
@@ -157,8 +155,51 @@ void cleanup(char **tokens){
     free(tokens);
 }
 
+int store_new_bg_process(int *record, int n){
+    for(int i = 0; i < n; i++){
+        if(record[i] == -1)
+            return i;
+    }
+    return -1;
+}
+
+void command_separation(char *input, long MAX_NO_TOKENS, int *last_token){
+    char **tokens;
+    char ***queue = (char***)malloc(sizeof(char*) * MAX_NO_TOKENS * TOTAL_PARALLEL_FG);
+    int command_no = 0;
+
+    int n = strlen(input);
+    char input_cpy[n];
+    strcpy(input_cpy,input);
+
+    char *pos, *command;
+    int pos_index = 0;
+    do{
+        pos = strstr(input_cpy,"&&");
+        if(pos != NULL)
+            pos_index = pos - input_cpy;
+
+        command = (char*)malloc(sizeof(char) * pos_index);
+
+        strncpy(command,input_cpy,pos_index);
+        tokens = tokenize(command,MAX_NO_TOKENS,last_token);
+        free(command);
+        
+        queue[command_no++] = tokens;
+
+        strncpy(input_cpy,input_cpy + (pos_index+2),n - (pos_index+1));
+
+
+        if(input_cpy[0] == '&'){
+            printf("\n Syntax error : invalid token - &\n");
+            exit(1);
+        }
+    }while(pos != NULL);   
+
+}
+
 char **tokenize(char *input, long MAX_NO_TOKENS, int *last_token){
-    int token_number = 0, token_index = 0, i;
+    int token_number = 0, token_index = 0, i, command_number = 0;
     char character;
     
     char *token = (char*)malloc(MAX_ARG_LEN * sizeof(char));
@@ -169,6 +210,7 @@ char **tokenize(char *input, long MAX_NO_TOKENS, int *last_token){
         if(character == ' ' || character == '\t' || character == '\n'){
             token[token_index] = '\0';
             if(token_index != 0){
+
                 tokens[token_number] = (char*)malloc(strlen(token) * sizeof(char));
                 strcpy(tokens[token_number++],token);
                 token_index = 0;
