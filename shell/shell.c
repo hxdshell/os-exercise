@@ -16,7 +16,6 @@
 #define CYAN "\033[0;36m"
 #define RESETCOLOR "\033[0m" 
 
-
 char **tokenize(char * input, long MAX_NOTOKENS, int *last_token);
 void cleanup(char ***queue);
 int store_new_bg_process(int *record, int n);
@@ -148,7 +147,6 @@ int main(int argc, char const *argv[])
 
             // error handling
             if(dir_err || too_many_bg){
-                cleanup(queue);
                 break;
             }
         }
@@ -159,8 +157,16 @@ int main(int argc, char const *argv[])
 }
 
 void cleanup(char ***queue){
-    
+    int i,j;
+    for(i = 0; queue[i] != NULL;i++){
+        for(j = 0; queue[i][j] != NULL; j++){
+            free(queue[i][j]);
+        }
+        free(queue[i]);
+    }
+    free(queue);
 }
+
 
 int store_new_bg_process(int *record, int n){
     for(int i = 0; i < n; i++){
