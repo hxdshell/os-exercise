@@ -20,7 +20,7 @@
 char **tokenize(char * input, long MAX_NOTOKENS, int *last_token);
 void cleanup(char ***queue);
 int store_new_bg_process(int *record, int n);
-char ***command_separation(char *input, long MAX_NO_TOKENS, int *last_token);
+char ***command_separation(char *input, long MAX_NO_TOKENS, int* last_token);
 
 void sigint_handler(int num){
     if(getpgid(0) != getpid()){
@@ -33,6 +33,7 @@ int main(int argc, char const *argv[])
     long MAX_INPUT_SIZE = sysconf(_SC_ARG_MAX); // ~2MB
     long MAX_NO_TOKENS = MAX_INPUT_SIZE / MAX_ARG_LEN; // 16348
 
+    int last_tokens[TOTAL_PARALLEL_FG];
     int last_token;
 
     int bg_running_processes=0;
@@ -50,9 +51,15 @@ int main(int argc, char const *argv[])
     int rc;
     int shell_id = getpid();
 
+    //error variables
+    int dir_err,too_many_bg;
+
 
     signal(SIGINT,sigint_handler);
     while(1){
+        // error var init
+        dir_err = too_many_bg = 0;
+
         // reap background process
         if(bg_running_processes > 0){
             wait_bg = waitpid(-1,NULL,WNOHANG);
@@ -66,10 +73,12 @@ int main(int argc, char const *argv[])
         getcwd(cwd,sizeof(cwd));
         printf("%s%s%s$ ", CYAN,cwd,RESETCOLOR);
         fgets(command, sizeof(command), stdin);
-        queue = command_separation(command,MAX_NO_TOKENS,&last_token);
-
+        queue = command_separation(command,MAX_NO_TOKENS,last_tokens);
+        
         for(int i = 0; queue[i] != NULL; i++){
             tokens = queue[i];
+            last_token = last_tokens[i];
+
             if(tokens[0] != NULL){
                 
                 // cd command handling
@@ -81,17 +90,15 @@ int main(int argc, char const *argv[])
                     else if(chdir(tokens[1]) == -1){
                         printf("%s\n\n",strerror(errno));
                     }
-                    cleanup(queue);
+                    dir_err = 1;
                     break;
                 }
-
                 //check for '&' for background process
                 if(strcmp(tokens[last_token],"&") == 0 && last_token > 0){
                     is_bg = 1;
                     tokens[last_token] = NULL;
                     bg_running_processes++;
                 }
-
                 //exit
                 int id;
                 if(strcmp(tokens[0],"exit") == 0 && last_token == 0){
@@ -108,21 +115,18 @@ int main(int argc, char const *argv[])
                 }
                 
             }
-
             // check if we can careate a bg process or not. max TOTAL_BG
             if(is_bg){
                 bg_index = store_new_bg_process(bg_process_ids,TOTAL_BG);
                 if(bg_index == -1){
                     printf("\n too many background processes\n");
-                    cleanup(queue);
-                    break;;
+                    too_many_bg = 1;
+                    break;
                 }
             }
-
             rc = fork();
             if(rc < 0){
                 perror("process creation failed!");
-                cleanup(queue);
                 continue;
             }else if(rc == 0){
                 if(is_bg){
@@ -130,6 +134,7 @@ int main(int argc, char const *argv[])
                 }
                 if(execvp(tokens[0],tokens)==-1){
                     printf("%s\n\n",strerror(errno));
+                    cleanup(queue);
                     exit(errno);
                 }
             }else{
@@ -139,9 +144,15 @@ int main(int argc, char const *argv[])
                 }else{
                     bg_process_ids[bg_index] = rc;
                 }
+            }
+
+            // error handling
+            if(dir_err || too_many_bg){
                 cleanup(queue);
+                break;
             }
         }
+        cleanup(queue);
     }
 
     return 0;
@@ -159,42 +170,32 @@ int store_new_bg_process(int *record, int n){
     return -1;
 }
 
-char ***command_separation(char *input, long MAX_NO_TOKENS, int *last_token){
-    char **tokens;
-    char ***queue = (char***)malloc(sizeof(char*) * MAX_NO_TOKENS * TOTAL_PARALLEL_FG);
+char ***command_separation(char *input, long MAX_NO_TOKENS, int* last_tokens){
+    int n = strlen(input);
+    
+    char ***queue = (char***)(malloc(TOTAL_PARALLEL_FG * sizeof(char**)));
     int command_no = 0;
 
-    int n = strlen(input);
-    char input_cpy[n];
-    strcpy(input_cpy,input);
-
-    char *pos, *command;
-    int pos_index = 0;
-
-    pos = strstr(input_cpy,"&&");
-    while(pos != NULL){
-        pos_index = pos - input_cpy;
-        
-        command = (char*)malloc(sizeof(char) * pos_index);
-
-        strncpy(command,input_cpy,pos_index);
-        tokens = tokenize(command,MAX_NO_TOKENS,last_token);
-        free(command);
-        
-        queue[command_no++] = tokens;
-
-        strncpy(input_cpy,input_cpy + (pos_index+2),n - (pos_index+1));
-
-        if(input_cpy[0] == '&'){
-            printf("\n Syntax error : invalid token - &\n");
-            cleanup(queue);
-            exit(1);
+    char buffer[n];
+    int index = 0, i;
+    for(i = 0; i < n; i++){
+        if(input[i] == '&' && i+1 < n){
+            if(input[i+1] == '&'){
+                buffer[index] = '\0';
+                queue[command_no] = tokenize(buffer,MAX_NO_TOKENS,&last_tokens[command_no]);
+                command_no++;
+                
+                // reset buffer
+                index = 0;
+                i++;
+                continue;
+            }
         }
-        
-        pos = strstr(input_cpy,"&&");
+        buffer[index++] = input[i];
     }
-    tokens = tokenize(input_cpy,MAX_NO_TOKENS,last_token);
-    queue[command_no++] = tokens;
+    buffer[index++] = '\0';
+    queue[command_no++] = tokenize(buffer,MAX_NO_TOKENS,&last_tokens[command_no]);
+    queue[command_no] = NULL;
 
     return queue;
 }
