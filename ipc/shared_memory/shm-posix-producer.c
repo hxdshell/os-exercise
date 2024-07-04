@@ -33,11 +33,15 @@ int main(int argc, char const *argv[])
         exit(errno);
     }
 
+    // intialize shared memroy with freeeee
+    void *intial_ptr = area_ptr;
     int n = SIZE/8;
+
     for(int i = 0; i < n; i++){
         sprintf(area_ptr,"%s","freeeee");
         area_ptr += 8;
     }
-
+    area_ptr = intial_ptr;
+    
     return 0;
 }
