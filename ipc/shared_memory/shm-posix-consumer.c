@@ -10,6 +10,9 @@
 int main(int argc, char const *argv[])
 {
     const char* shared_mem_name = "/OS";
+    const char *producer_pipe = "/tmp/producer_pipe";
+    const char *consumer_pipe = "/tmp/consumer_pipe";
+
     const int SIZE = 4096; 
 
     int shm_fd;
@@ -28,7 +31,44 @@ int main(int argc, char const *argv[])
         exit(errno);
     }
 
-    printf("%s\n",(char*)area_ptr);
-    
+    // make a named pipe (consumer)
+    if(mkfifo(consumer_pipe, 0777) == -1){
+        if(errno != EEXIST){
+            perror(strerror(errno));
+            exit(errno);
+        }
+    }
+
+    // producer pipe for reading
+    int fdp;
+    fdp = open(producer_pipe, O_RDONLY);
+    if(fdp == -1){
+        perror(strerror(errno));
+        exit(errno);
+    }
+
+    // consumer (this) pipe for writing
+    int fdc;
+    fdc = open(consumer_pipe, O_WRONLY);
+    if(fdc == -1){
+        perror(strerror(errno));
+        exit(errno);
+    }
+
+    int offset;
+    void *ptr;
+    for(int i = 0; i < 15; i++){
+        read(fdp,&offset,sizeof(int));
+
+        ptr = (void *)(area_ptr + offset);
+        printf("%s\n",(char *)ptr);
+        sleep(1);
+        sprintf(ptr,"%s","freeeee");
+        write(fdc,&offset, sizeof(int));
+        printf("Consumed %s\n",(char *)ptr);
+    }
+
+    close(fdc);
+    close(fdp);    
     return 0;
 }
