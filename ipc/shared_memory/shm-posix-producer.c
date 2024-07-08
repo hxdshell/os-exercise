@@ -72,18 +72,17 @@ int main(int argc, char const *argv[])
     int offset = 0;
     int i;
     sleep(1);
-    for(i = 0; i < 10; i++){
+    for(i = 0; i < 512; i++){
         write(fdp,&offset,sizeof(int));
 
-        sprintf(area_ptr,"%s","OSisFUk");
+        sprintf(area_ptr,"%s","OSisFUN");
         offset += 8;
         area_ptr += 8;
     }
 
     area_ptr = intial_ptr;
-    for(; i < 15; i++){
+    for(; i < 1000; i++){
         // read consumed memoery location (offset)
-        printf("reading free memory \n");
         read(fdc,&offset,sizeof(int));
 
         area_ptr = (void *)(intial_ptr + offset);
@@ -92,11 +91,14 @@ int main(int argc, char const *argv[])
         write(fdp,&offset,sizeof(int));
     }
 
+    printf("waiting for consumer to exit...\n");
     int x = 0;
     while(1){
         x = read(fdc,&offset,sizeof(int));
-        if(x == 0)
+        if(x == 0){
+            printf("Consumer exited, Goodbye\n");
             break;
+        }
     }
     return 0;
 }

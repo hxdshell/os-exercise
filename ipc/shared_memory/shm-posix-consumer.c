@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 
 int main(int argc, char const *argv[])
 {
@@ -27,7 +28,7 @@ int main(int argc, char const *argv[])
     area_ptr = mmap(0,SIZE, PROT_READ | PROT_WRITE, MAP_SHARED ,shm_fd, 0);
     if(area_ptr == (void *)-1){
         perror(strerror(errno));
-        printf("mmap failed!\n");
+        printf("mmap filed : maybe you should run './producer' first.\n");
         exit(errno);
     }
 
@@ -57,18 +58,36 @@ int main(int argc, char const *argv[])
 
     int offset;
     void *ptr;
-    for(int i = 0; i < 15; i++){
+    for(int i = 0; i < 1000; i++){
         read(fdp,&offset,sizeof(int));
 
         ptr = (void *)(area_ptr + offset);
         printf("%s\n",(char *)ptr);
-        sleep(1);
+        usleep(500);
         sprintf(ptr,"%s","freeeee");
         write(fdc,&offset, sizeof(int));
-        printf("Consumed %s\n",(char *)ptr);
     }
 
     close(fdc);
-    close(fdp);    
+    close(fdp);
+
+    // Close everything
+    if(unlink(consumer_pipe) == -1){
+        perror(strerror(errno));
+        exit(errno);
+    }
+    printf("consumer pipe removed\n");
+    if(unlink(producer_pipe) == -1){
+        perror(strerror(errno));
+        exit(errno);
+    }
+    printf("producer pipe removed\n");
+
+    if (shm_unlink(shared_mem_name) == -1) {
+		perror(strerror(errno));
+        exit(errno);
+	}
+    printf("shared memory removed\n");
+
     return 0;
 }
