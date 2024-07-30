@@ -5,22 +5,16 @@
 
 #include "alloc.h"
 
-#define BLOCKSIZE (PAGESIZE/MINALLOC)
+typedef struct Map
+{
+    int status;
+    void *start;
+    int size;
+} Map;
+
 
 void *page;
-int page_map[BLOCKSIZE];
-int main(int argc, char const *argv[])
-{
-    init_alloc();
-    printf("%p\n\n",page);
-    char *one = alloc(8);
-    char *two = alloc(16);
-    char *three = alloc(8);
-
-
-    cleanup();
-    return 0;
-}
+Map page_map[PAGESIZE];
 
 int init_alloc(){
     page = mmap(NULL,PAGESIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -28,9 +22,11 @@ int init_alloc(){
         perror(strerror(errno));
         return errno;
     }
-    memset(page_map,0,sizeof(page_map));
-
-    printf("page created\n");
+    for(int i= 0; i < PAGESIZE; i++){
+        page_map[i].status = 0;
+        page_map[i].start = NULL;
+        page_map[i].size = 0;
+    }
     return 0;
 }
 
@@ -39,7 +35,6 @@ int cleanup(){
         perror(strerror(errno));
         return errno;
     }
-    printf("\npage returned\n");
     return 0;
 }
 
@@ -54,8 +49,8 @@ char *alloc(int size){
 
     int offset = -1;
     int counter = 0;
-    for(int i = 0; i < BLOCKSIZE && counter < size; i++){
-        if(page_map[i] == 0){
+    for(int i = 0; i < PAGESIZE && counter < size; i++){
+        if(page_map[i].status == 0){
             if(offset == -1)
                 offset = i;
 
@@ -72,14 +67,32 @@ char *alloc(int size){
         return NULL;
 
     for(int i = 0; i < size; i++){
-        page_map[i+offset] = 1;
+        page_map[i+offset].status = 1;
     }
 
     void *start = (void *)(page + offset);
+    page_map[offset].size = size;
+    page_map[offset].start = start;
 
     return (char *)(start);
 }
 
 void dealloc(char * chunk){
-    
+    int loc;
+    int found = 0;
+    for(loc = 0; loc < PAGESIZE; loc++){
+        if((char *)page_map[loc].start == chunk){
+            found = 1;
+            break;
+        }
+    }
+    if(found){
+        page_map[loc].start = NULL;
+        int counter = 0;
+        for(int i = loc; counter < page_map[loc].size; i++){
+            page_map[i].status = 0;
+            counter++;
+        }
+        page_map[loc].size = 0;
+    }
 }
