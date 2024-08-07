@@ -39,8 +39,8 @@ int cleanup(){
 }
 
 char *alloc(int size){
-    if(size < MINALLOC || (size % 8) != 0){
-        printf("block size must be multiple of 8\n");
+    if(size < MINALLOC || (size % MINALLOC) != 0){
+        printf("block size must be multiple of %d\n",MINALLOC);
         return NULL;
     }
 
