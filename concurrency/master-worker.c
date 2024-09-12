@@ -11,7 +11,8 @@
 */
 int M, N, C, P;
 int *buffer;
-int fill = 0,count = 0;
+int place = 0;
+int count = 0;
 
 typedef struct concurrency_control
 {
@@ -20,23 +21,20 @@ typedef struct concurrency_control
     pthread_cond_t *fill;
 }concurrency_control;
 
-
 void put(int value){
-    buffer[fill] = value;
-    fill = (fill + 1) % N;
-    count++;
+    buffer[place++] = value;
+    count++; 
 }
-
 void *produce(void *args){
-    pthread_mutex_t *lock = (*(concurrency_control *)args).lock;
+    concurrency_control *control = (concurrency_control *)args;
     
-    for(int i = 0; i < M; i++){
-        int rc = pthread_mutex_lock(lock);
+    while(count < M){
+        int rc = pthread_mutex_lock(control->lock);
         assert(rc == 0);
 
-        put(i);
+        put(count);
 
-        rc = pthread_mutex_unlock(lock);
+        rc = pthread_mutex_unlock(control->lock);
         assert(rc == 0);
     }
 
