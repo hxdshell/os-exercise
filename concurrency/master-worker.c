@@ -153,6 +153,12 @@ int main(int argc, char const *argv[])
         assert(rc == 0);
     }
 
+    //wait for producers
+    for(int i = 0; i < P; i++){
+        rc = pthread_join(producers[i],NULL);
+        assert(rc == 0);
+    }
+
     // wait for consumers
     for(int i = 0; i < C; i++){
         rc = pthread_join(consumers[i],NULL);
