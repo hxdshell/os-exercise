@@ -46,14 +46,15 @@ void *produce(void *args){
         rc = pthread_mutex_lock(control->lock);
         assert(rc == 0);
 
+        while(buffer_count == N && total_produced < M){
+            rc = pthread_cond_wait(control->empty, control->lock);
+            assert(rc == 0);
+        }
         if(total_produced >= M){
+            pthread_cond_broadcast(control->fill);
             rc = pthread_mutex_unlock(control->lock);
             assert(rc == 0);
             break;
-        }
-        while(buffer_count == N){
-            rc = pthread_cond_wait(control->empty, control->lock);
-            assert(rc == 0);
         }
 
         put(total_produced);
@@ -79,14 +80,14 @@ void *consume(void *args){
         rc = pthread_mutex_lock(control->lock);
         assert(rc == 0);
 
+        while(buffer_count == 0 && total_consumed < M){
+            rc = pthread_cond_wait(control->fill, control->lock);
+            assert(rc == 0);
+        }
         if(total_consumed >= M){
             rc = pthread_mutex_unlock(control->lock);
             assert(rc == 0);
             break;
-        }
-        while(buffer_count == 0){
-            rc = pthread_cond_wait(control->fill, control->lock);
-            assert(rc == 0);
         }
 
         value = get();
@@ -121,6 +122,11 @@ int main(int argc, char const *argv[])
     N = atoi(argv[2]);
     C = atoi(argv[3]);
     P = atoi(argv[4]);
+
+    if(C == 0 || P == 0){
+        printf("Number of threads cannot be 0\n");
+        return 1;
+    }
 
     pthread_t producers[P];
     pthread_t consumers[C];
