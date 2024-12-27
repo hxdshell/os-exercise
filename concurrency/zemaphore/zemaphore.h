@@ -1,7 +1,8 @@
 #include <pthread.h>
+#include <stdatomic.h>
 
 typedef struct zemaphore {
-    int z;
+    atomic_int z;
     pthread_cond_t cond;
     pthread_mutex_t lock;
 } zem_t;
